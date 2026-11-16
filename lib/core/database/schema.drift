@@ -1,0 +1,63 @@
+CREATE TABLE categories (
+ id TEXT NOT NULL PRIMARY KEY,
+ name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 80),
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ archived_at INTEGER
+);
+CREATE UNIQUE INDEX categories_name_unique ON categories(lower(trim(name)));
+CREATE TABLE receipt_attachments (
+ id TEXT NOT NULL PRIMARY KEY,
+ local_path TEXT NOT NULL,
+ verified_at INTEGER NOT NULL,
+ created_at INTEGER NOT NULL
+);
+CREATE TABLE expenses (
+ id TEXT NOT NULL PRIMARY KEY,
+ submission_id TEXT NOT NULL UNIQUE,
+ submission_fingerprint TEXT NOT NULL,
+ amount_minor INTEGER NOT NULL CHECK(typeof(amount_minor) = 'integer' AND amount_minor > 0),
+ currency_code TEXT NOT NULL DEFAULT 'LKR' CHECK(currency_code = 'LKR'),
+ category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+ merchant_name TEXT NOT NULL DEFAULT '' CHECK(length(merchant_name) <= 160),
+ note TEXT NOT NULL DEFAULT '' CHECK(length(note) <= 2000),
+ spent_at INTEGER NOT NULL,
+ source TEXT NOT NULL CHECK(source IN ('manual', 'receipt')),
+ receipt_attachment_id TEXT REFERENCES receipt_attachments(id) ON DELETE RESTRICT,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ deleted_at INTEGER,
+ CHECK(source != 'receipt' OR receipt_attachment_id IS NOT NULL)
+);
+CREATE INDEX expenses_date ON expenses(spent_at) WHERE deleted_at IS NULL;
+CREATE INDEX expenses_category_date ON expenses(category_id, spent_at) WHERE deleted_at IS NULL;
+CREATE TABLE budgets (
+ id TEXT NOT NULL PRIMARY KEY,
+ month TEXT NOT NULL CHECK(length(month) = 7),
+ category_id TEXT REFERENCES categories(id) ON DELETE RESTRICT,
+ amount_minor INTEGER NOT NULL CHECK(typeof(amount_minor) = 'integer' AND amount_minor > 0),
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX budgets_scope ON budgets(month, ifnull(category_id, ''));
+CREATE TABLE app_settings (
+ "key" TEXT NOT NULL PRIMARY KEY,
+ value TEXT NOT NULL
+);
+CREATE TABLE sync_outbox (
+ id TEXT NOT NULL PRIMARY KEY,
+ entity_type TEXT NOT NULL,
+ entity_id TEXT NOT NULL,
+ operation TEXT NOT NULL CHECK(operation IN ('upsert', 'delete')),
+ created_at INTEGER NOT NULL,
+ attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+ next_attempt_at INTEGER,
+ last_error TEXT
+);
+CREATE INDEX outbox_pending ON sync_outbox(next_attempt_at, created_at);
+CREATE TABLE report_history (
+ id TEXT NOT NULL PRIMARY KEY,
+ month TEXT NOT NULL,
+ local_path TEXT NOT NULL,
+ created_at INTEGER NOT NULL
+);
